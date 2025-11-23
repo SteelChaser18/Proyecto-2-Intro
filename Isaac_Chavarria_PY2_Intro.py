@@ -162,7 +162,106 @@ class Enemigo:
         self.columna = nueva_columna
 
 
-# ✦✦✦✦✦✦✦✦✦  M O D O   E S C A P A  ✦✦✦✦✦✦✦✦✦
+# ✦✦✦✦✦✦✦✦✦  P E R S E C U C I Ó N   D E   E N E M I G O S  ✦✦✦✦✦✦✦✦✦
+
+def obtener_direccion_hacia(jugador, enemigo, mapa):
+    diferencia_fila = jugador.fila - enemigo.fila
+    diferencia_columna = jugador.columna - enemigo.columna
+
+    opciones = []
+
+    if abs(diferencia_fila) > abs(diferencia_columna):
+        if diferencia_fila < 0:
+            opciones.append("arriba")
+        elif diferencia_fila > 0:
+            opciones.append("abajo")
+
+        if diferencia_columna < 0:
+            opciones.append("despacho_izquierda")
+        elif diferencia_columna > 0:
+            opciones.append("derecha")
+    else:
+        if diferencia_columna < 0:
+            opciones.append("izquierda")
+        elif diferencia_columna > 0:
+            opciones.append("derecha")
+
+        if diferencia_fila < 0:
+            opciones.append("arriba")
+        elif diferencia_fila > 0:
+            opciones.append("abajo")
+
+    direcciones_validas = []
+    for direccion in opciones:
+        nueva_fila = enemigo.fila
+        nueva_columna = enemigo.columna
+
+        if direccion == "arriba":
+            nueva_fila -= 1
+        elif direccion == "abajo":
+            nueva_fila += 1
+        elif direccion == "izquierda":
+            nueva_columna -= 1
+        elif direccion == "derecha":
+            nueva_columna += 1
+
+        if not (0 <= nueva_fila < len(mapa)) or not (0 <= nueva_columna < len(mapa[0])):
+            continue
+
+        casilla_destino = mapa[nueva_fila][nueva_columna]
+
+        if casilla_destino.puede_pasar_enemigo():
+            direcciones_validas.append(direccion)
+
+    if not direcciones_validas:
+        return None
+
+    return direcciones_validas[0]
+
+
+# ✦✦✦✦✦✦✦✦✦  T R A M P A S  ✦✦✦✦✦✦✦✦✦
+
+import time
+
+class SistemaTrampas:
+    def __init__(self):
+        self.trampas = []
+        self.tiempo_ultima_colocacion = 0
+        self.cooldown = 5
+        self.max_trampas = 3
+
+    def colocar_trampa(self, fila, columna):
+        instante_actual = time.time()
+
+        # cooldown
+        if instante_actual - self.tiempo_ultima_colocacion < self.cooldown:
+            return
+
+        # límite de trampas activas
+        if len(self.trampas) >= self.max_trampas:
+            return
+
+        self.trampas.append({
+            "fila": fila,
+            "columna": columna,
+            "tiempo_colocada": instante_actual
+        })
+
+        self.tiempo_ultima_colocacion = instante_actual
+
+    def verificar_enemigos(self, enemigos):
+        enemigos_eliminados = []
+
+        for trampa in self.trampas:
+            for enemigo in enemigos:
+                if enemigo.fila == trampa["fila"] and enemigo.columna == trampa["columna"]:
+                    enemigos_eliminados.append(enemigo)
+                    self.trampas.remove(trampa)
+                    break
+
+        return enemigos_eliminados
+
+# ✦✦✦✦✦✦✦✦✦  M O D O   E S C A P A   ( A C T U A L I Z A D O ) ✦✦✦✦✦✦✦✦✦
 
 def modo_escapa():
     mapa = generar_mapa()
@@ -174,10 +273,11 @@ def modo_escapa():
         Enemigo(7, 12)
     ]
 
+    trampas = SistemaTrampas()
     juego_activo = True
 
     while juego_activo:
-        comando = input("Mover (w/a/s/d): ")
+        comando = input("Mover (w/a/s/d) o trampa (t): ")
 
         if comando == "w":
             jugador.mover("arriba", mapa)
@@ -186,12 +286,82 @@ def modo_escapa():
         elif comando == "a":
             jugador.mover("izquierda", mapa)
         elif comando == "d":
-            jugador.mover("derecha", mapa")
+            jugador.mover("derecha", mapa)
+        elif comando == "t":
+            trampas.colocar_trampa(jugador.fila, jugador.columna)
 
-        # movimiento simple de enemigos para que no genere problemas
-        # Cambiarlo despues por el completo
+        # movimiento enemigo con persecución
         for enemigo in enemigos:
-            enemigo.mover(random.choice(["arriba","abajo","izquierda","derecha"]), mapa)
+            direccion = obtener_direccion_hacia(jugador, enemigo, mapa)
+            if direccion:
+                enemigo.mover(direccion, mapa)
+
+        # trampas → eliminar enemigos
+        eliminados = trampas.verificar_enemigos(enemigos)
+        for enemigo in eliminados:
+            enemigos.remove(enemigo)
+            # reaparición simple luego de 10 segundos
+            time.sleep(0.1)
+            time.sleep(10)
+            enemigos.append(Enemigo(random.randint(0, len(mapa)-1),
+                                    random.randint(0, len(mapa[0])-1)))
+
+        # colisión
+        for enemigo in enemigos:
+            if enemigo.fila == jugador.fila and enemigo.columna == jugador.columna:
+                print("Fuiste atrapado.")
+                juego_activo = False
+
+        # salida
+        if (jugador.fila, jugador.columna) == (len(mapa)-1, len(mapa[0])-1):
+            print("¡Escapaste!")
+            juego_activo = False
+
+
+# ✦✦✦✦✦✦✦✦✦  M O D O   E S C A P A  ✦✦✦✦✦✦✦✦✦
+
+def modo_escapa(): #Ya actualizado con las trampas
+    mapa = generar_mapa()
+    jugador = Jugador(0, 0)
+
+    enemigos = [
+        Enemigo(5, 5),
+        Enemigo(10, 3),
+        Enemigo(7, 12)
+    ]
+
+    trampas = SistemaTrampas()
+    juego_activo = True
+
+    while juego_activo:
+        comando = input("Mover (w/a/s/d) o trampa (t): ")
+
+        if comando == "w":
+            jugador.mover("arriba", mapa)
+        elif comando == "s":
+            jugador.mover("abajo", mapa)
+        elif comando == "a":
+            jugador.mover("izquierda", mapa)
+        elif comando == "d":
+            jugador.mover("derecha", mapa)
+        elif comando == "t":
+            trampas.colocar_trampa(jugador.fila, jugador.columna)
+
+        # movimiento enemigo con persecución
+        for enemigo in enemigos:
+            direccion = obtener_direccion_hacia(jugador, enemigo, mapa)
+            if direccion:
+                enemigo.mover(direccion, mapa)
+
+        # trampas → eliminar enemigos
+        eliminados = trampas.verificar_enemigos(enemigos)
+        for enemigo in eliminados:
+            enemigos.remove(enemigo)
+            # reaparición simple luego de 10 segundos
+            time.sleep(0.1)
+            time.sleep(10)
+            enemigos.append(Enemigo(random.randint(0, len(mapa)-1),
+                                    random.randint(0, len(mapa[0])-1)))
 
         # colisión
         for enemigo in enemigos:
